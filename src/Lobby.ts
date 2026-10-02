@@ -372,7 +372,12 @@ class Lobby {
 		const forced = forcedLobbyOptions();
 		if (Object.keys(forced).length > 0) {
 			Object.assign(this.options, forced);
-			this.broadcastAction({ action: "lobbyOptions", gamemode: this.gameMode, ...forced });
+			// The client stores `gamemode` as the lobby's gamemode and only knows the full key
+			// ("gamemode_mp_attrition"), which the host sends in its own options. The short
+			// this.gameMode ("attrition") would silently switch off the gamemode's rules
+			// (no Nemesis PvP blind, no gamemode bans).
+			const gamemode = this.options.gamemode ?? `gamemode_mp_${this.gameMode}`;
+			this.broadcastAction({ action: "lobbyOptions", ...forced, gamemode });
 		}
 
 		this.isInGame = true;
