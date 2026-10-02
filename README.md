@@ -26,6 +26,60 @@ npm run start
 5. Game actions flow between clients through the server
 6. Server maintains authoritative state for lives, scores, and PvP outcomes
 
+## Tournament Mode
+
+Runs every lobby on one shared seed, with games started only by admins. Works with the stock mod: players just point `server_url` at this server.
+
+While tourney mode is on:
+- Hosts can't start games (they get an error message). Admins start lobbies remotely.
+- Every game uses the tourney seed until it's rerolled. The host's custom seed / different-seeds settings are overridden.
+- If a loadout is set, both players get that deck and stake regardless of the host's choice.
+
+Tourney mode is **on by default** (set `TOURNEY_ENABLED_DEFAULT=false` to start unlocked). State (on/off, seed, loadout) is saved to `TOURNEY_STATE_PATH` (`/data/tourney.json` in Docker), so restarts keep the same seed and lock state.
+
+### Setup
+
+Put a long random token in `.env` next to `docker-compose.yml`:
+
+```
+ADMIN_TOKEN=<long random string>
+# Host address the reverse proxy connects to (omit to keep the API loopback-only)
+ADMIN_HTTP_BIND=10.0.0.5
+```
+
+If the proxy is on another machine, firewall port 8790 so only the proxy's IP can reach it. The API itself is plain HTTP, so the proxy → server hop should run over a private network or VPN, not the public internet.
+
+### Commands (docker exec)
+
+```bash
+docker compose exec socket node dist/admin-cli.js status
+docker compose exec socket node dist/admin-cli.js tourney on          # lock starting; off to unlock
+docker compose exec socket node dist/admin-cli.js reroll              # new random seed
+docker compose exec socket node dist/admin-cli.js reroll ABC12345     # specific seed
+docker compose exec socket node dist/admin-cli.js loadout "Red Deck" 1  # deck + stake (1 = White ... 8 = Gold, 11 = Spectral+); "-" = host's choice
+docker compose exec socket node dist/admin-cli.js lobbies             # lobbies + players (--json for raw)
+docker compose exec socket node dist/admin-cli.js start ABCDE FGHIJ   # start specific lobbies
+docker compose exec socket node dist/admin-cli.js start all           # start every full lobby
+```
+
+`start` skips lobbies that don't have two players, have a player reconnecting, or are already in game (add `--force` to restart those). `--ready-only` also skips lobbies whose guest hasn't readied up.
+
+### HTTP API
+
+The same commands are available at `GET|POST /admin/<command>` on port 8790 (bound to `ADMIN_HTTP_BIND`, expose it through your reverse proxy), with `Authorization: Bearer <ADMIN_TOKEN>`. POST bodies are JSON arguments:
+
+| Command | Body |
+|---|---|
+| `status`, `lobbies` | – |
+| `tourney` | `{"enabled": true}` |
+| `reroll` | `{}` or `{"seed": "ABC12345"}` |
+| `loadout` | `{"back": "Red Deck", "stake": 1}` (`null` = host's choice) |
+| `start` | `{"lobby_code": ["ABCDE"]}` or `{"all": true}`, optional `"force"`, `"ready_only"` |
+
+```bash
+curl -X POST https://your.domain/admin/start -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"all": true}'
+```
+
 ## Modded Actions
 
 The modded action system allows third-party mods to use the server as a relay without needing dedicated server-side action handlers.

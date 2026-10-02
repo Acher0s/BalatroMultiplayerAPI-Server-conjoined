@@ -45,9 +45,13 @@ import {
 	recordLiveLogLines,
 	recordLogHashes,
 } from "./logHashStore.js";
+import { getTourney } from "./tourney.js";
 
 /** Current TCG server version - clients must match this to use TCG features */
 const TCG_SERVER_VERSION = 1;
+
+const TOURNEY_LOCKED_MESSAGE =
+	"Tournament mode: games are started by the tournament admins.";
 
 const usernameAction = (
 	{ username, modHash }: ActionHandlerArgs<ActionUsername>,
@@ -137,37 +141,19 @@ const startGameAction = (client: Client) => {
 		return;
 	}
 
+	// In tourney mode only admins start games (see admin.ts)
+	if (getTourney().enabled) {
+		client.sendAction({ action: "error", message: TOURNEY_LOCKED_MESSAGE });
+		return;
+	}
+
 	// Only start the game if guest is ready
 	// TODO: Uncomment this when Client ready is released in the mod
 	// if (!lobby.guest?.isReadyLobby) {
 	// 	return;
 	// }
 
-	const lives = lobby.options.starting_lives
-		? Number.parseInt(lobby.options.starting_lives)
-		: GameModes[lobby.gameMode].startingLives;
-
-	// Remember the authoritative seed so end-of-game log hashes can be keyed by
-	// it (null for different-seeds games, where each client uses its own).
-	const seed = lobby.options.different_seeds ? undefined : generateSeed();
-	lobby.seed = seed ?? null;
-	// resetPlayers() clears isInGame, so it must run before we set it true below.
-	lobby.resetPlayers();
-
-	lobby.isInGame = true;
-	lobby.broadcastAction({
-		action: "startGame",
-		deck: "c_multiplayer_1",
-		seed,
-	});
-
-	// Reset players' lives
-	lobby.setPlayersLives(lives);
-
-	// Unready guest for next game
-	if (lobby.guest) {
-		lobby.guest.isReadyLobby = false;
-	}
+	lobby.startGame();
 };
 
 const readyBlindAction = (client: Client) => {
@@ -764,6 +750,12 @@ const startTcgBettingAction = (client: Client) => {
 
 	// Only allow the host to start the TCG game
 	if (!lobby || lobby.host?.id !== client.id) {
+		return;
+	}
+
+	// This also starts a game, so it is locked in tourney mode too
+	if (getTourney().enabled) {
+		client.sendAction({ action: "error", message: TOURNEY_LOCKED_MESSAGE });
 		return;
 	}
 

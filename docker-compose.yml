@@ -12,7 +12,16 @@ services:
     ports:
       - "8788:8788"
       - "49484:8788"
+      # Admin HTTP API (tourney commands). Set ADMIN_HTTP_BIND in .env to the host
+      # address the reverse proxy reaches (e.g. a private/VPN IP), and firewall the
+      # port to the proxy's IP. Defaults to loopback, i.e. not reachable remotely.
+      - "${ADMIN_HTTP_BIND:-127.0.0.1}:8790:8790"
     environment:
+      # Shared secret for the admin CLI and HTTP API; set it in .env next to this file.
+      # The HTTP API is disabled when this is empty.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      # Tourney mode/seed/loadout, persisted so a restart keeps the same seed.
+      TOURNEY_STATE_PATH: /data/tourney.json
       NODE_ENV: development
       # Replay-log hash store (better-sqlite3). Lives on the ./data volume so it
       # survives container redeploys. The ban-watcher writes central_hard_bans
