@@ -51,7 +51,7 @@ import { getTourney } from "./tourney.js";
 const TCG_SERVER_VERSION = 1;
 
 const TOURNEY_LOCKED_MESSAGE =
-	"Tournament mode: games are started by the tournament admins.";
+	"Lobbies are locked: games are started by the tournament admins.";
 
 const usernameAction = (
 	{ username, modHash }: ActionHandlerArgs<ActionUsername>,
@@ -141,8 +141,8 @@ const startGameAction = (client: Client) => {
 		return;
 	}
 
-	// In tourney mode only admins start games (see admin.ts)
-	if (getTourney().enabled) {
+	// While manual starting is off, only admins start games (see admin.ts)
+	if (!getTourney().manualStart) {
 		client.sendAction({ action: "error", message: TOURNEY_LOCKED_MESSAGE });
 		return;
 	}
@@ -753,8 +753,8 @@ const startTcgBettingAction = (client: Client) => {
 		return;
 	}
 
-	// This also starts a game, so it is locked in tourney mode too
-	if (getTourney().enabled) {
+	// This also starts a game, so it is locked along with normal starts
+	if (!getTourney().manualStart) {
 		client.sendAction({ action: "error", message: TOURNEY_LOCKED_MESSAGE });
 		return;
 	}

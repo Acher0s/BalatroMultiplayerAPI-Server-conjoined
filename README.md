@@ -28,14 +28,15 @@ npm run start
 
 ## Tournament Mode
 
-Runs every lobby on one shared seed, with games started only by admins. Works with the stock mod: players just point `server_url` at this server.
+Admin controls for running a tournament: lock lobbies, start them remotely, and force one seed and deck/stake on every lobby. Three independent switches:
 
-While tourney mode is on:
-- Hosts can't start games (they get an error message). Admins start lobbies remotely.
-- Every game uses the tourney seed until it's rerolled. The host's custom seed / different-seeds settings are overridden.
-- If a loadout is set, both players get that deck and stake regardless of the host's choice.
+| Switch | Default | When on | When off |
+|---|---|---|---|
+| `manual_start` | off | Hosts can start games themselves | Lobbies are locked: hosts get an error, admins start lobbies remotely |
+| `force_seed` | on | Every game uses the rolled seed, also games played back to back, until it's rerolled. Host custom seeds / different-seeds settings are overridden | Each game gets a random seed as normal. Turning it back on restores the last rolled seed |
+| `force_combo` | on | The loadout's deck and/or stake (if set) are forced on both players | Host's choice |
 
-Tourney mode is **on by default** (set `TOURNEY_ENABLED_DEFAULT=false` to start unlocked). State (on/off, seed, loadout) is saved to `TOURNEY_STATE_PATH` (`/data/tourney.json` in Docker), so restarts keep the same seed and lock state.
+Forcing applies to every game start, whether a host or an admin started it. Admin `start` works regardless of `manual_start`. Settings, seed and loadout are saved to `TOURNEY_STATE_PATH` (`/data/tourney.json` in Docker), so restarts keep them.
 
 ### Setup
 
@@ -53,7 +54,9 @@ If the proxy is on another machine, firewall port 8790 so only the proxy's IP ca
 
 ```bash
 docker compose exec socket node dist/admin-cli.js status
-docker compose exec socket node dist/admin-cli.js tourney on          # lock starting; off to unlock
+docker compose exec socket node dist/admin-cli.js manual-start off   # lock lobbies (on = hosts can start)
+docker compose exec socket node dist/admin-cli.js force-seed on       # off = random seed per game
+docker compose exec socket node dist/admin-cli.js force-combo on      # off = host picks deck/stake
 docker compose exec socket node dist/admin-cli.js reroll              # new random seed
 docker compose exec socket node dist/admin-cli.js reroll ABC12345     # specific seed
 docker compose exec socket node dist/admin-cli.js loadout "Red Deck" 1  # deck + stake (1 = White ... 8 = Gold, 11 = Spectral+); "-" = host's choice
@@ -71,7 +74,7 @@ The same commands are available at `GET|POST /admin/<command>` on port 8790 (bou
 | Command | Body |
 |---|---|
 | `status`, `lobbies` | – |
-| `tourney` | `{"enabled": true}` |
+| `settings` | any of `{"manual_start": false, "force_seed": true, "force_combo": true}` |
 | `reroll` | `{}` or `{"seed": "ABC12345"}` |
 | `loadout` | `{"back": "Red Deck", "stake": 1}` (`null` = host's choice) |
 | `start` | `{"lobby_code": ["ABCDE"]}` or `{"all": true}`, optional `"force"`, `"ready_only"` |

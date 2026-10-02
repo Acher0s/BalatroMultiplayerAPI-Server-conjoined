@@ -3,15 +3,21 @@ import { dirname } from "node:path";
 import { generateSeed } from "./utils.js";
 
 /**
- * Tournament mode state. While enabled:
- *  - hosts cannot start games themselves; only admins can (see Lobby.startGame)
- *  - every game uses the same server seed until it is rerolled
- *  - the deck/stake (if set) are forced on both players at game start
+ * Tournament settings, three independent switches:
+ *  - manualStart: when false (the default), lobbies are locked and hosts can't start
+ *    games themselves; only admins can (see admin.ts `start`)
+ *  - forceSeed: when true, every game in every lobby uses `seed`, including games
+ *    played back to back, until it's rerolled. When false, each game gets a random
+ *    seed as normal. Turning it back on brings back the last rolled seed.
+ *  - forceCombo: when true, the deck/stake (whichever is set) are forced on both players
  *
- * Persisted to disk so a container restart mid-tournament keeps the same seed.
+ * Forcing applies to every game start, whether a host or an admin started it.
+ * Persisted to disk so a container restart mid-tournament keeps the same settings and seed.
  */
 export type TourneyState = {
-	enabled: boolean;
+	manualStart: boolean;
+	forceSeed: boolean;
+	forceCombo: boolean;
 	seed: string;
 	/** Deck name as the mod knows it (e.g. "Red Deck"), or null to leave the host's choice */
 	back: string | null;
@@ -19,21 +25,33 @@ export type TourneyState = {
 	stake: number | null;
 };
 
+export type TourneySwitch = "manualStart" | "forceSeed" | "forceCombo";
+
 const STATE_PATH =
 	process.env.TOURNEY_STATE_PATH ||
 	(existsSync("/data") ? "/data/tourney.json" : "./data/tourney.json");
 
 const load = (): TourneyState => {
-	// Locked by default: until an admin turns tourney mode off, only admins can start games
+	// Default: lobbies locked, seed forced, deck/stake forced once a combo is set
 	const fallback: TourneyState = {
-		enabled: process.env.TOURNEY_ENABLED_DEFAULT !== "false",
+		manualStart: false,
+		forceSeed: true,
+		forceCombo: true,
 		seed: generateSeed(),
 		back: null,
 		stake: null,
 	};
 	try {
 		if (!existsSync(STATE_PATH)) return fallback;
-		return { ...fallback, ...JSON.parse(readFileSync(STATE_PATH, "utf-8")) };
+		const saved = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
+		// Files from before the switches were split had one `enabled` flag for all three
+		if (typeof saved.enabled === "boolean" && saved.manualStart === undefined) {
+			saved.manualStart = !saved.enabled;
+			saved.forceSeed = saved.enabled;
+			saved.forceCombo = saved.enabled;
+		}
+		delete saved.enabled;
+		return { ...fallback, ...saved };
 	} catch (error) {
 		console.error(`Failed to read tourney state from ${STATE_PATH}:`, error);
 		return fallback;
@@ -53,13 +71,13 @@ const save = () => {
 
 export const getTourney = (): Readonly<TourneyState> => state;
 
-export const setTourneyEnabled = (enabled: boolean) => {
-	state.enabled = enabled;
+export const setSwitch = (name: TourneySwitch, value: boolean) => {
+	state[name] = value;
 	save();
-	console.log(`Tourney mode ${enabled ? "enabled" : "disabled"}`);
+	console.log(`Tourney ${name} set to ${value}`);
 };
 
-/** Picks a new random seed, or sets the given one. Applies to the next games started. */
+/** Picks a new random seed, or sets the given one. Used by the next games started while forceSeed is on. */
 export const rerollSeed = (seed?: string): string => {
 	state.seed = seed ? seed.toUpperCase() : generateSeed();
 	save();
@@ -74,6 +92,9 @@ export const setLoadout = (back: string | null, stake: number | null) => {
 	console.log(`Tourney loadout set to back=${back ?? "(host choice)"} stake=${stake ?? "(host choice)"}`);
 };
 
+/** The seed a game starting now should use, or null to pick one the normal way. */
+export const forcedSeed = (): string | null => (state.forceSeed ? state.seed : null);
+
 /**
  * Lobby options pushed to both players right before startGame. The client
  * applies lobbyOptions from the server regardless of host/guest, and TCP keeps
@@ -81,13 +102,15 @@ export const setLoadout = (back: string | null, stake: number | null) => {
  *  - custom_seed/different_seeds: otherwise the host's custom seed (or per-player
  *    seeds) would replace the server seed client-side
  *  - different_decks=false makes both clients copy back/stake from these options
+ * Empty when nothing is forced.
  */
 export const forcedLobbyOptions = (): Record<string, string | number | boolean> => {
-	const options: Record<string, string | number | boolean> = {
-		custom_seed: "random",
-		different_seeds: false,
-	};
-	if (state.back !== null || state.stake !== null) {
+	const options: Record<string, string | number | boolean> = {};
+	if (state.forceSeed) {
+		options.custom_seed = "random";
+		options.different_seeds = false;
+	}
+	if (state.forceCombo && (state.back !== null || state.stake !== null)) {
 		options.different_decks = false;
 		options.random_loadout = false;
 		options.challenge = "";

@@ -9,7 +9,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type Client from './Client.js'
 import Lobby, { Lobbies } from './Lobby.js'
-import { getTourney, rerollSeed, setLoadout, setTourneyEnabled } from './tourney.js'
+import { type TourneySwitch, forcedSeed, getTourney, rerollSeed, setLoadout, setSwitch } from './tourney.js'
 
 const ADMIN_PORT = Number(process.env.ADMIN_PORT) || 8789
 const ADMIN_HTTP_PORT = Number(process.env.ADMIN_HTTP_PORT) || 8790
@@ -183,12 +183,23 @@ const adminHandlers: Record<string, AdminHandler> = {
 		return { success: true, tourney: getTourney(), lobbyCount: Lobbies.size, inGame }
 	},
 
-	/** { enabled: boolean } — while enabled, only admins can start games */
-	tourney(parsed) {
-		if (typeof parsed.enabled !== 'boolean') {
-			return { success: false, error: 'enabled must be true or false' }
+	/**
+	 * { manual_start?: boolean, force_seed?: boolean, force_combo?: boolean } — flip any of
+	 * the three switches (see tourney.ts). Omitted ones are left as they are.
+	 */
+	settings(parsed) {
+		const switches: [string, TourneySwitch][] = [
+			['manual_start', 'manualStart'],
+			['force_seed', 'forceSeed'],
+			['force_combo', 'forceCombo'],
+		]
+		const given = switches.filter(([key]) => parsed[key] !== undefined)
+		if (given.length === 0) {
+			return { success: false, error: 'Pass at least one of manual_start, force_seed, force_combo' }
 		}
-		setTourneyEnabled(parsed.enabled)
+		const bad = given.find(([key]) => typeof parsed[key] !== 'boolean')
+		if (bad) return { success: false, error: `${bad[0]} must be true or false` }
+		for (const [key, name] of given) setSwitch(name, parsed[key])
 		return { success: true, tourney: getTourney() }
 	},
 
@@ -198,7 +209,7 @@ const adminHandlers: Record<string, AdminHandler> = {
 		if (seed !== undefined && (typeof seed !== 'string' || !/^[A-Za-z0-9]{1,16}$/.test(seed))) {
 			return { success: false, error: 'seed must be 1-16 letters/digits' }
 		}
-		return { success: true, seed: rerollSeed(seed) }
+		return { success: true, seed: rerollSeed(seed), tourney: getTourney() }
 	},
 
 	/** { back?: string | null, stake?: number | null } — null/omitted leaves it to the host */
@@ -255,7 +266,7 @@ const adminHandlers: Record<string, AdminHandler> = {
 			started.push(lobby.code)
 		}
 		console.log(`Admin start: started [${started.join(', ')}], skipped ${skipped.length}`)
-		return { success: true, seed: getTourney().enabled ? getTourney().seed : null, started, skipped }
+		return { success: true, seed: forcedSeed(), started, skipped }
 	},
 }
 

@@ -1,7 +1,7 @@
 import type Client from "./Client.js";
 import { InsaneInt } from "./InsaneInt.js";
 import GameModes from "./GameMode.js";
-import { forcedLobbyOptions, getTourney } from "./tourney.js";
+import { forcedLobbyOptions, forcedSeed } from "./tourney.js";
 import { generateSeed } from "./utils.js";
 import type {
 	ActionLobbyInfo,
@@ -349,18 +349,17 @@ class Lobby {
 
 	/** Starts a game for both players. Callers decide who may trigger it (host or admin). */
 	startGame = () => {
-		const tourney = getTourney();
-
 		const lives = this.options.starting_lives
 			? Number.parseInt(this.options.starting_lives)
 			: GameModes[this.gameMode].startingLives;
 
 		// Remember the authoritative seed so end-of-game log hashes can be keyed by
 		// it (null for different-seeds games, where each client uses its own).
-		// In tourney mode every lobby plays the shared tourney seed.
+		// With force_seed on, every lobby plays the shared tourney seed.
+		const tourneySeed = forcedSeed();
 		let seed: string | undefined;
-		if (tourney.enabled) {
-			seed = tourney.seed;
+		if (tourneySeed !== null) {
+			seed = tourneySeed;
 		} else {
 			seed = this.options.different_seeds ? undefined : generateSeed();
 		}
@@ -368,10 +367,10 @@ class Lobby {
 		// resetPlayers() clears isInGame, so it must run before we set it true below.
 		this.resetPlayers();
 
-		if (tourney.enabled) {
-			// Must arrive before startGame so the clients use the server seed and
-			// the forced deck/stake, not whatever the host configured.
-			const forced = forcedLobbyOptions();
+		// Must arrive before startGame so the clients use the server seed and
+		// the forced deck/stake, not whatever the host configured.
+		const forced = forcedLobbyOptions();
+		if (Object.keys(forced).length > 0) {
 			Object.assign(this.options, forced);
 			this.broadcastAction({ action: "lobbyOptions", gamemode: this.gameMode, ...forced });
 		}

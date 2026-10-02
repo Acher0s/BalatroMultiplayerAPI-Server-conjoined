@@ -8,10 +8,12 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ''
 
 const USAGE = `Usage: node dist/admin-cli.js <command> [args]
 
-  status                          Tourney mode, seed, loadout, lobby counts
+  status                          Switches, seed, loadout, lobby counts
   lobbies [--json]                Every lobby with its players
-  tourney on|off                  Lock/unlock starting games (admins only while on)
-  reroll [SEED]                   New random seed, or set SEED
+  manual-start on|off             Let hosts start games themselves (off = lobbies locked, admins start)
+  force-seed on|off               Every game uses the rolled seed (off = random seed per game)
+  force-combo on|off              Force the loadout's deck/stake (off = host's choice)
+  reroll [SEED]                   New random seed, or set SEED (used while force-seed is on)
   loadout <deck|-> [stake|-]      Force deck (e.g. "Red Deck") and stake (1 = White, 8 = Gold, 11 = Spectral+); "-" = host's choice
   start <CODE...|all> [--force] [--ready-only]
                                   Start lobbies. --force restarts lobbies already in game,
@@ -29,9 +31,11 @@ const buildPayload = (args: string[]): Record<string, any> | null => {
 		case 'status':
 		case 'lobbies':
 			return { command }
-		case 'tourney':
+		case 'manual-start':
+		case 'force-seed':
+		case 'force-combo':
 			if (positional[0] !== 'on' && positional[0] !== 'off') return null
-			return { command, enabled: positional[0] === 'on' }
+			return { command: 'settings', [command.replace('-', '_')]: positional[0] === 'on' }
 		case 'reroll':
 			return positional[0] ? { command, seed: positional[0] } : { command }
 		case 'loadout': {
