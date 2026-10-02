@@ -40,7 +40,7 @@ Forcing applies to every game start, whether a host or an admin started it. Admi
 
 ### Setup
 
-Put a long random token in `.env` next to `docker-compose.yml`:
+Full deployment steps (Docker on a Proxmox LXC, firewall, logs in `/mnt/data`): see [deploy/README.md](deploy/README.md). In short, copy `.env.example` to `.env` and put a long random token in it:
 
 ```
 ADMIN_TOKEN=<long random string>

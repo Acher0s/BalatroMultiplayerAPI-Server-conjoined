@@ -1,0 +1,24 @@
+# Proxmox firewall for the LXC container running the game server.
+# Copy to the PROXMOX HOST (not the container) as /etc/pve/firewall/<CTID>.fw,
+# e.g. /etc/pve/firewall/105.fw, and replace the example addresses:
+#   192.168.1.0/24   your LAN
+#   192.168.1.20     the Discord bot's machine
+#   192.168.1.30     the reverse proxy (only needed if the proxy exposes the admin API)
+#
+# Everything not listed here is dropped before it reaches the container, so Docker's
+# published ports can't bypass it. Replies to allowed traffic and all outgoing traffic
+# (apt, Docker image pulls) are allowed.
+
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+
+[RULES]
+# Game port: open to everyone (players connect directly; forward 8788 on your router)
+IN ACCEPT -p tcp -dport 8788 -log nolog
+# Admin API: only the bot and the reverse proxy
+IN ACCEPT -source 192.168.1.20,192.168.1.30 -p tcp -dport 8790 -log nolog
+# SSH and ping from your LAN only
+IN SSH(ACCEPT) -source 192.168.1.0/24 -log nolog
+IN Ping(ACCEPT) -source 192.168.1.0/24 -log nolog

@@ -1,0 +1,21 @@
+# Daily rotation for the server's log file (see docker-compose.yml: everything the
+# server prints is appended to $LOGS_DIR/server.log).
+#
+#   - rotate daily, keep 30 days
+#   - gzip rotated logs, except the most recent one (quick grepping)
+#   - copytruncate: the server holds the file open and has no reopen signal, so copy
+#     then truncate in place (a few lines written during the truncate can be lost)
+#
+# Install inside the container (Debian ships logrotate and runs it daily):
+#   cp deploy/logrotate/balatro-server-log /etc/logrotate.d/balatro-server-log
+# Change the path below if LOGS_DIR in .env isn't /mnt/data/balatro/logs.
+
+/mnt/data/balatro/logs/*.log {
+    daily
+    rotate 30
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
